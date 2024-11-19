@@ -1,0 +1,6 @@
+python-telegram-bot>=21.7
+pandas>=2.2.3
+selenium>=4.26.0
+beautifulsoup4>=4.12.3
+psycopg2-binary>=2.9.0
+
