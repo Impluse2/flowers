@@ -60,7 +60,6 @@ def extract_price(price_str: str):
         return float(price_str)
     return 0
 
-
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Приветственное сообщение с кнопками для навигации."""
@@ -86,6 +85,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_message = "Добро пожаловать! Выберите действие:"
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+
+# Функция возврата в главное меню
+async def return_to_main_menu(update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Посмотреть товары", callback_data='show_products')],
+        [InlineKeyboardButton("Сортировать по алфавиту", callback_data='sort_products')],
+        [InlineKeyboardButton("Сортировать по цене", callback_data='sort_products_price')],
+        [InlineKeyboardButton("Показать корзину", callback_data='show_cart')],
+        [InlineKeyboardButton("Получить помощь", callback_data='help')],
+        [InlineKeyboardButton("Обновить список товаров", callback_data='update_products')],
+        [InlineKeyboardButton("Перейти на главную страницу", url=config.TARGET_URL)]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    message = "Вы вернулись в главное меню. Выберите действие:"
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        await query.message.reply_text(text=message, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(message, reply_markup=reply_markup)
+
 
 # Обработчик команды /products
 async def show_products(update: Update, context: ContextTypes.DEFAULT_TYPE, products_data: pd.DataFrame = None):
@@ -118,7 +138,7 @@ async def show_products_page(update: Update, products_data: pd.DataFrame, page: 
     # Добавляем кнопку "Показать еще" для следующей страницы
     next_page_button = InlineKeyboardButton('Показать еще', callback_data=f"next_{page + 1}")
     keyboard.append([next_page_button])
-
+    keyboard.append([InlineKeyboardButton("Главное меню", callback_data='main_menu')])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     # Отправляем новое сообщение с товарами (или редактируем старое, если сообщение уже существует)
@@ -193,6 +213,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Отображаем товары для следующей страницы
         await show_products_page(update, products_df, next_page)
+
+
+    elif callback_data.startswith('main_menu'):
+        await return_to_main_menu(update, context)
 
     elif callback_data == 'sort_asc':
         # Сортировка по алфавиту (A-Z)
@@ -343,7 +367,8 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Кнопки для управления корзиной
     keyboard = [
-        [InlineKeyboardButton("Назад к товарам", callback_data='show_products')]
+        [InlineKeyboardButton("Назад к товарам", callback_data='show_products')],
+        [InlineKeyboardButton("Главное меню", callback_data='main_menu')]
     ]
 
     # Добавляем кнопку "Очистить корзину", только если корзина не пуста
@@ -394,7 +419,8 @@ async def show_sort_options(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Сортировать по алфавиту (А-Я)", callback_data='sort_asc')],
         [InlineKeyboardButton("Сортировать по алфавиту (Я-А)", callback_data='sort_desc')],
-        [InlineKeyboardButton("Отменить", callback_data='show_products')]  # Кнопка для отмены
+        [InlineKeyboardButton("Вернуться к продуктам", callback_data='show_products')],
+        [InlineKeyboardButton("Главное меню", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.callback_query.message.reply_text("Выберите порядок сортировки:", reply_markup=reply_markup)
@@ -404,7 +430,8 @@ async def show_sort_options_price(update: Update, context: ContextTypes.DEFAULT_
     keyboard = [
         [InlineKeyboardButton("Сортировать по цене (от низкой к высокой)", callback_data='sort_price_asc')],
         [InlineKeyboardButton("Сортировать по цене (от высокой к низкой)", callback_data='sort_price_desc')],
-        [InlineKeyboardButton("Отменить", callback_data='show_products')]  # Кнопка для отмены
+        [InlineKeyboardButton("Вернуться к продуктам", callback_data='show_products')],
+        [InlineKeyboardButton("Главное меню", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.callback_query.message.reply_text("Выберите порядок сортировки:", reply_markup=reply_markup)
@@ -486,8 +513,9 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_message = (
         "Вот доступные действия, которые вы можете выполнить:\n"
         "- Нажмите на кнопку 'Посмотреть товары', чтобы увидеть товары.\n"
-        "- Нажмите на кнопку 'Сортировка по алфавиту', чтобы увидеть отсортированные товары.\n"
-        "- Нажмите на кнопку 'Сортировка по цене', чтобы увидеть отсортированные товары.\n"
+        "- Нажмите на кнопку 'Сортировать по алфавиту', чтобы увидеть отсортированные товары.\n"
+        "- Нажмите на кнопку 'Сортировать по цене', чтобы увидеть отсортированные товары.\n"
+        "- Нажмите на кнопку 'Показать корзину', чтобы посмотреть товары добавленные в корзину.\n"
         "- Нажмите на кнопку 'Получить помощь', чтобы получить помощь.\n"
         "- Нажмите на кнопку 'Обновить список товаров', чтобы обновить данные.\n"
         "- Нажмите на кнопку 'Перейти на главную страницу', чтобы перейти на сайт."

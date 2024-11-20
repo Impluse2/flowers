@@ -24,7 +24,7 @@ CHROME_DRIVER_PATH = '/usr/local/bin/chromedriver'  # Убедитесь, что
 # Настройки для Selenium
 chrome_options = Options()
 #chrome_options.add_argument("--headless")  # Запуск в фоновом режиме, без открытия браузера
-
+print(sys.executable)
 # Функция для получения данных через Selenium
 def get_page_with_selenium(url):
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=chrome_options)
