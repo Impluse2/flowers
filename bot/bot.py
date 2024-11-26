@@ -1,7 +1,12 @@
 import logging
 import subprocess
+
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, ReplyKeyboardMarkup, message
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from aiogram import types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import pandas as pd
 import psycopg2
 import re
@@ -10,6 +15,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import config
+from config import dp, bot
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../db')))  # Добавляем путь к db
 from db.dbconnect import DB_CONFIG
 # Настройка логирования
@@ -61,54 +67,49 @@ def extract_price(price_str: str):
     return 0
 
 # Обработчик команды /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Приветственное сообщение с кнопками для навигации."""
-
-    # Получаем информацию о пользователе
-    telegram_user_id = update.message.from_user.id
-    username = update.message.from_user.username  # Имя пользователя (если оно есть)
+@dp.message(Command(commands='start'))
+async def start_command(message: types.Message):
+    """Обрабатывает команду /start и отображает главное меню."""
+    telegram_user_id = message.from_user.id
+    username = message.from_user.username  # Имя пользователя
 
     # Добавляем пользователя в базу данных
     add_user_to_db(telegram_user_id, username)
 
-    # Кнопки для взаимодействия
-    keyboard = [
-        [InlineKeyboardButton("Посмотреть товары", callback_data='show_products')],
-        [InlineKeyboardButton("Сортировать по алфавиту", callback_data='sort_products')],
-        [InlineKeyboardButton("Сортировать по цене", callback_data='sort_products_price')],
-        [InlineKeyboardButton("Показать корзину", callback_data='show_cart')],
-        [InlineKeyboardButton("Получить помощь", callback_data='help')],
-        [InlineKeyboardButton("Обновить список товаров", callback_data='update_products')],
-        [InlineKeyboardButton("Перейти на главную страницу", url=config.TARGET_URL)]  # Кнопка с URL
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
+    # Создаем клавиатуру для главного меню
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Посмотреть товары", callback_data='show_products')],
+        [InlineKeyboardButton(text="Сортировать по алфавиту", callback_data='sort_products')],
+        [InlineKeyboardButton(text="Сортировать по цене", callback_data='sort_products_price')],
+        [InlineKeyboardButton(text="Показать корзину", callback_data='show_cart')],
+        [InlineKeyboardButton(text="Получить помощь", callback_data='help')],
+        [InlineKeyboardButton(text="Обновить список товаров", callback_data='update_products')],
+        [InlineKeyboardButton(text="Перейти на главную страницу", url=config.TARGET_URL)]
+    ])
+    # Отправляем приветственное сообщение
     welcome_message = "Добро пожаловать! Выберите действие:"
-    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+    # await message.answer(welcome_message, reply_markup=keyboard)
+    await message.answer(welcome_message, reply_markup=keyboard)
 
-# Функция возврата в главное меню
-async def return_to_main_menu(update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("Посмотреть товары", callback_data='show_products')],
-        [InlineKeyboardButton("Сортировать по алфавиту", callback_data='sort_products')],
-        [InlineKeyboardButton("Сортировать по цене", callback_data='sort_products_price')],
-        [InlineKeyboardButton("Показать корзину", callback_data='show_cart')],
-        [InlineKeyboardButton("Получить помощь", callback_data='help')],
-        [InlineKeyboardButton("Обновить список товаров", callback_data='update_products')],
-        [InlineKeyboardButton("Перейти на главную страницу", url=config.TARGET_URL)]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+# Обработчик для возврата в главное меню
+# @dp.message(Command(commands='return_to_main_menu'))
+async def return_to_main_menu(callback_query: types.Message):
+    """Возвращает пользователя в главное меню."""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Посмотреть товары", callback_data='show_products')],
+        [InlineKeyboardButton(text="Сортировать по алфавиту", callback_data='sort_products')],
+        [InlineKeyboardButton(text="Сортировать по цене", callback_data='sort_products_price')],
+        [InlineKeyboardButton(text="Показать корзину", callback_data='show_cart')],
+        [InlineKeyboardButton(text="Получить помощь", callback_data='help')],
+        [InlineKeyboardButton(text="Обновить список товаров", callback_data='update_products')],
+        [InlineKeyboardButton(text="Перейти на главную страницу", url=config.TARGET_URL)]
+    ])
+
     message = "Вы вернулись в главное меню. Выберите действие:"
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        await query.message.reply_text(text=message, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(message, reply_markup=reply_markup)
-
+    await callback_query.answer(message, reply_markup=keyboard)
 
 # Обработчик команды /products
-async def show_products(update: Update, context: ContextTypes.DEFAULT_TYPE, products_data: pd.DataFrame = None):
+async def show_products(update: CallbackQuery, products_data: pd.DataFrame = None):
     """Отображает список товаров с кнопками для просмотра."""
     # Если products_data не передан, используем глобальный products_df
     if products_data is None:
@@ -123,58 +124,72 @@ async def show_products(update: Update, context: ContextTypes.DEFAULT_TYPE, prod
 
 
 # Функция для отображения товаров на странице
-async def show_products_page(update: Update, products_data: pd.DataFrame, page: int):
+async def show_products_page(message: CallbackQuery, products_data: pd.DataFrame, page: int):
     """Отображает товары на странице с кнопками пагинации."""
     start_index = page * ITEMS_PER_PAGE
     end_index = (page + 1) * ITEMS_PER_PAGE
     products_page = products_data.iloc[start_index:end_index]
 
     # Генерация кнопок с товарами
-    keyboard = [
-        [InlineKeyboardButton(product["name"], callback_data=f"product_{index}")]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=product["name"], callback_data=f"product_{index}")]
         for index, product in products_page.iterrows()
-    ]
+    ])
 
+    next_page_button = InlineKeyboardButton(text='Показать еще', callback_data=f"next_{page + 1}")
+    keyboard.inline_keyboard.append([next_page_button])  # Добавляем кнопку в конец
+
+    # Добавляем кнопку для главного меню
+    keyboard.inline_keyboard.append([InlineKeyboardButton(text="Главное меню", callback_data='main_menu')])
+
+    # Отправляем сообщение с клавиатурой
+    await message.message.answer("Выберите товар:", reply_markup=keyboard)
     # Добавляем кнопку "Показать еще" для следующей страницы
-    next_page_button = InlineKeyboardButton('Показать еще', callback_data=f"next_{page + 1}")
-    keyboard.append([next_page_button])
-    keyboard.append([InlineKeyboardButton("Главное меню", callback_data='main_menu')])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    # Отправляем новое сообщение с товарами (или редактируем старое, если сообщение уже существует)
-    if update.message:
-        await update.message.reply_text("Выберите товар:", reply_markup=reply_markup)
-    else:
-        await update.callback_query.message.reply_text("Выберите товар:", reply_markup=reply_markup)
+    # next_page_button = InlineKeyboardButton(text='Показать еще', callback_data=f"next_{page + 1}")
+    # keyboard.add([next_page_button])
+    # keyboard.append([InlineKeyboardButton(text="Главное меню", callback_data='main_menu')])
+    # reply_markup = InlineKeyboardMarkup(keyboard)
+    #
+    # # Отправляем новое сообщение с товарами (или редактируем старое, если сообщение уже существует)
+    # if update.message:
+    #     await update.message.reply_text("Выберите товар:", reply_markup=reply_markup)
+    # else:
+    #     await update.callback_query.message.reply_text("Выберите товар:", reply_markup=reply_markup)
 
 
 # Обработчик нажатий на кнопки
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@dp.callback_query()
+async def button_handler(callback_query: CallbackQuery):
     """Обрабатывает нажатия на кнопки и выполняет соответствующие действия."""
-    query = update.callback_query
-    await query.answer()
+    await callback_query.answer()
 
-    # Проверяем тип callback_data
-    callback_data = query.data
+    # Получаем callback_data
+    callback_data = callback_query.data
 
     if callback_data == 'show_products':
         # Если нажата кнопка "Посмотреть товары"
-        await show_products(update, context)
+        await show_products(callback_query)
+
     elif callback_data == 'show_cart':
         # Если нажата кнопка "Показать корзину"
-        await show_cart(update, context)  # Отображаем корзину
+        await show_cart(callback_query)
+
     elif callback_data == 'sort_products':
         # Если нажата кнопка "Сортировать по алфавиту"
-        await show_sort_options(update, context)
+        await show_sort_options(callback_query)
+
     elif callback_data == 'sort_products_price':
         # Если нажата кнопка "Сортировать по цене"
-       await show_sort_options_price(update, context)
+        await show_sort_options_price(callback_query)
+
     elif callback_data == 'help':
         # Если нажата кнопка "Получить помощь"
-        await show_help(update, context)
+        await show_help(callback_query)
+
     elif callback_data == 'update_products':
         # Если нажата кнопка "Обновить список товаров"
-        await update_products(update, context)
+        await update_products(callback_query)
+
     elif callback_data.startswith('product'):
         # Если нажата кнопка с товаром
         product_index = int(callback_data.split('_')[1])
@@ -187,79 +202,78 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"[Ссылка на товар]({product['link']})"
         )
 
-        keyboard = [
-            [InlineKeyboardButton("Добавить в корзину", callback_data=f"add_to_cart_{product_index}")],
-            [InlineKeyboardButton("Назад к товарам", callback_data='show_products')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        # Кнопки для взаимодействия с товаром
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Добавить в корзину", callback_data=f"add_to_cart_{product_index}")],
+            [InlineKeyboardButton(text="Назад к товарам", callback_data='show_products')]
+        ])
 
+        # Проверяем наличие изображения
         if product.get('image', 'Без изображения') != 'Без изображения':
-            await query.message.reply_photo(
+            await callback_query.message.answer_photo(
                 photo=product['image'],
                 caption=message,
                 parse_mode="Markdown",
-                reply_markup=reply_markup
+                reply_markup=keyboard
             )
         else:
-            await query.message.reply_text(
+            await callback_query.message.answer(
                 text=message,
                 parse_mode="Markdown",
-                reply_markup=reply_markup
+                reply_markup=keyboard
             )
 
     elif callback_data.startswith('next_'):
-        # Получаем номер следующей страницы из callback_data
+        # Переход к следующей странице товаров
         next_page = int(callback_data.split('_')[1])
+        await show_products_page(callback_query, products_df, next_page)
 
-        # Отображаем товары для следующей страницы
-        await show_products_page(update, products_df, next_page)
-
-
-    elif callback_data.startswith('main_menu'):
-        await return_to_main_menu(update, context)
+    elif callback_data == 'main_menu':
+        # Возврат в главное меню
+        await return_to_main_menu(callback_query.message)
 
     elif callback_data == 'sort_asc':
         # Сортировка по алфавиту (A-Z)
-        await sort_products(update, context, ascending=True)
+        await sort_products(callback_query, ascending=True)
 
     elif callback_data == 'sort_desc':
         # Сортировка по алфавиту (Z-A)
-        await sort_products(update, context, ascending=False)
+        await sort_products(callback_query, ascending=False)
 
     elif callback_data == 'sort_price_asc':
         # Сортировка по цене (от низкой к высокой)
-        await sort_products_price(update, context, by_price=True)
+        await sort_products_price(callback_query, by_price=True)
 
     elif callback_data == 'sort_price_desc':
         # Сортировка по цене (от высокой к низкой)
-        await sort_products_price(update, context, by_price=False)
+        await sort_products_price(callback_query, by_price=False)
 
     elif callback_data.startswith('add_to_cart'):
-        # Получаем индекс товара из callback_data
+        # Добавление товара в корзину
         match = re.match(r"add_to_cart_(\d+)", callback_data)
         if match:
             product_index = int(match.group(1))
-            # В данном месте вызов add_to_cart будет синхронным, так как сама функция не асинхронная
             product = products_df.iloc[product_index]
-            user_id = update.callback_query.from_user.id  # Получаем ID пользователя
+            user_id = callback_query.from_user.id
+
             success = add_to_cart(user_id, product['id'], quantity=1)
 
             if success:
-                await query.message.reply_text(f"Товар '{product['name']}' был добавлен в вашу корзину!")
+                await callback_query.message.answer(text=f"Товар '{product['name']}' был добавлен в вашу корзину!")
             else:
-                await query.message.reply_text(f"Произошла ошибка при добавлении товара '{product['name']}' в корзину.")
+                await callback_query.message.answer(text=f"Произошла ошибка при добавлении товара '{product['name']}' в корзину.")
         else:
             logging.error(f"Ошибка извлечения индекса товара из callback_data: {callback_data}")
 
     elif callback_data == 'clear_cart':
         # Очистка корзины пользователя
-        user_id = update.callback_query.from_user.id  # Получаем ID пользователя
+        user_id = callback_query.from_user.id
         success = clear_cart(user_id)
 
         if success:
-            await query.message.reply_text("Ваша корзина была успешно очищена!")
+            await callback_query.message.answer(text="Ваша корзина была успешно очищена!")
         else:
-            await query.message.reply_text("Произошла ошибка при очистке корзины.")
+            await callback_query.message.answer(text="Произошла ошибка при очистке корзины.")
 
 def add_to_cart(telegram_user_id: int, product_id: int, quantity: int = 1):
     """Добавляет товар в корзину для конкретного пользователя. Если товар уже есть, увеличиваем количество."""
@@ -339,17 +353,18 @@ def get_user_cart(telegram_user_id: int):
         return []
 
 # Функция для отображения корзины пользователя
-async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_cart(callback_query: CallbackQuery):
     """Отображает содержимое корзины пользователя."""
 
     # Получаем ID пользователя
-    telegram_user_id = update.callback_query.from_user.id
+    telegram_user_id = callback_query.from_user.id
 
     # Получаем товары из корзины пользователя
     cart_items = get_user_cart(telegram_user_id)
 
     if not cart_items:
-        await update.callback_query.message.reply_text("Ваша корзина пуста.")
+        await callback_query.message.answer("Ваша корзина пуста.")
+        await callback_query.answer()
         return
 
     # Формируем сообщение с товарами в корзине
@@ -366,18 +381,17 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cart_message += f"\n*Итого: {total_price} ₽*"
 
     # Кнопки для управления корзиной
-    keyboard = [
-        [InlineKeyboardButton("Назад к товарам", callback_data='show_products')],
-        [InlineKeyboardButton("Главное меню", callback_data='main_menu')]
-    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Назад к товарам", callback_data='show_products')],
+        [InlineKeyboardButton(text="Главное меню", callback_data='main_menu')],
+        [InlineKeyboardButton(text="Очистить корзину", callback_data='clear_cart')]
+    ])
 
-    # Добавляем кнопку "Очистить корзину", только если корзина не пуста
-    if cart_items:
-        keyboard.insert(0, [InlineKeyboardButton("Очистить корзину", callback_data='clear_cart')])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.callback_query.message.reply_text(cart_message, parse_mode="Markdown", reply_markup=reply_markup)
+    # Редактируем сообщение в чате
+    await callback_query.message.answer(
+        text=cart_message, parse_mode="Markdown", reply_markup=keyboard
+    )
+    await callback_query.answer()  # Подтверждаем callback
 
 # Функция для очистки корзины пользователя
 def clear_cart(telegram_user_id: int):
@@ -409,34 +423,32 @@ def clear_cart(telegram_user_id: int):
         return True
     except psycopg2.Error as e:
         logging.error(f"Ошибка при очистке корзины: {e}")
-        # Дополнительная информация о ошибки
+        # Дополнительная информация об ошибке
         logging.error(f"Текст ошибки: {e.pgcode} - {e.pgerror}")
         return False
 
 
-async def show_sort_options(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_sort_options(update: CallbackQuery):
     """Показывает две опции сортировки: A-Z и Z-A"""
-    keyboard = [
-        [InlineKeyboardButton("Сортировать по алфавиту (А-Я)", callback_data='sort_asc')],
-        [InlineKeyboardButton("Сортировать по алфавиту (Я-А)", callback_data='sort_desc')],
-        [InlineKeyboardButton("Вернуться к продуктам", callback_data='show_products')],
-        [InlineKeyboardButton("Главное меню", callback_data='main_menu')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.message.reply_text("Выберите порядок сортировки:", reply_markup=reply_markup)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Сортировать по алфавиту (А-Я)", callback_data='sort_asc')],
+        [InlineKeyboardButton(text="Сортировать по алфавиту (Я-А)", callback_data='sort_desc')],
+        [InlineKeyboardButton(text="Вернуться к продуктам", callback_data='show_products')],
+        [InlineKeyboardButton(text="Главное меню", callback_data='main_menu')]
+    ])
+    await update.message.answer(text="Выберите порядок сортировки:", reply_markup=keyboard)
 
-async def show_sort_options_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_sort_options_price(update: CallbackQuery):
     """Показывает две опции сортировки: A-Z и Z-A"""
-    keyboard = [
-        [InlineKeyboardButton("Сортировать по цене (от низкой к высокой)", callback_data='sort_price_asc')],
-        [InlineKeyboardButton("Сортировать по цене (от высокой к низкой)", callback_data='sort_price_desc')],
-        [InlineKeyboardButton("Вернуться к продуктам", callback_data='show_products')],
-        [InlineKeyboardButton("Главное меню", callback_data='main_menu')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.message.reply_text("Выберите порядок сортировки:", reply_markup=reply_markup)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Сортировать по цене (от низкой к высокой)", callback_data='sort_price_asc')],
+        [InlineKeyboardButton(text="Сортировать по цене (от высокой к низкой)", callback_data='sort_price_desc')],
+        [InlineKeyboardButton(text="Вернуться к продуктам", callback_data='show_products')],
+        [InlineKeyboardButton(text="Главное меню", callback_data='main_menu')]
+    ])
+    await update.message.answer(text="Выберите порядок сортировки:", reply_markup=keyboard)
 
-async def sort_products(update: Update, context: ContextTypes.DEFAULT_TYPE, ascending: bool):
+async def sort_products(update: CallbackQuery, ascending: bool):
     """Сортирует товары по алфавиту и отображает их."""
     global products_df  # Это глобальная переменная для продуктов
 
@@ -449,11 +461,11 @@ async def sort_products(update: Update, context: ContextTypes.DEFAULT_TYPE, asce
         # Сбрасываем индексы после сортировки
         sorted_products_df = sorted_products_df.reset_index(drop=True)
         # Показать товары после сортировки
-        await show_products(update, context, sorted_products_df)  # Передаем отсортированные данные
+        await show_products(update, sorted_products_df)  # Передаем отсортированные данные
     else:
-        await update.message.reply_text("Нет товаров для сортировки.")
+        await update.message.answer(text="Нет товаров для сортировки.")
 
-async def sort_products_price(update: Update, context: ContextTypes.DEFAULT_TYPE, by_price: bool):
+async def sort_products_price(update: CallbackQuery, by_price: bool):
     """Сортирует товары по цене и отображает их."""
     global products_df  # Это глобальная переменная для продуктов
 
@@ -471,15 +483,15 @@ async def sort_products_price(update: Update, context: ContextTypes.DEFAULT_TYPE
         sorted_products_df = sorted_products_df.drop(columns=['price_numeric'])
 
         # Показать товары после сортировки
-        await show_products(update, context, sorted_products_df)  # Передаем отсортированные данные
+        await show_products(update, sorted_products_df)  # Передаем отсортированные данные
     else:
-        await update.message.reply_text("Нет товаров для сортировки.")
+        await update.message.answer(text="Нет товаров для сортировки.")
 
-async def update_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def update_products(update: CallbackQuery):
     """Обновляет список товаров, вызывая парсер и перезагружая данные."""
     try:
         # Сообщаем пользователю, что обновление началось
-        await update.callback_query.message.reply_text("Обновление списка товаров началось. Пожалуйста, подождите...")
+        await update.message.answer(text="Обновление списка товаров началось. Пожалуйста, подождите...")
 
         # Предположим, что парсер - это внешний скрипт, который нужно запустить
         # Можно использовать subprocess для вызова вашего парсера, если это отдельный файл
@@ -496,19 +508,19 @@ async def update_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
             products_df = load_products()
 
             # Отправляем сообщение об успешном обновлении
-            await update.callback_query.message.reply_text("Данные успешно обновлены!")
+            await update.message.answer(text="Данные успешно обновлены!")
         else:
             # Если произошла ошибка в парсере
             logging.error(f"Ошибка при запуске парсера: {result.stderr}")
-            await update.callback_query.message.reply_text("Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
+            await update.message.answer(text="Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
 
     except Exception as e:
         # Если ошибка в процессе
         logging.error(f"Ошибка при обновлении списка товаров: {e}")
-        await update.callback_query.message.reply_text("Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
+        await update.message.answer(text="Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
 
 # Функция для отображения помощи
-async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_help(update: CallbackQuery):
     """Отправляет информацию о доступных командах."""
     help_message = (
         "Вот доступные действия, которые вы можете выполнить:\n"
@@ -520,7 +532,7 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- Нажмите на кнопку 'Обновить список товаров', чтобы обновить данные.\n"
         "- Нажмите на кнопку 'Перейти на главную страницу', чтобы перейти на сайт."
     )
-    await update.callback_query.message.reply_text(help_message)
+    await update.message.answer(help_message)
 
 def add_user_to_db(telegram_user_id: int, username: str = None):
     """Добавляет нового пользователя в базу данных, если его там нет."""
@@ -549,20 +561,5 @@ def add_user_to_db(telegram_user_id: int, username: str = None):
     except psycopg2.Error as e:
         logging.error(f"Ошибка при добавлении пользователя в базу данных: {e}")
 
-# Основная функция для запуска бота
-def main():
-    # Вставьте сюда токен вашего бота
-    TOKEN = config.BOT_TOKEN
-
-    application = Application.builder().token(TOKEN).build()
-
-    # Регистрируем обработчики
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button))
-
-    # Запускаем бота
-    application.run_polling()
-
-
 if __name__ == "__main__":
-    main()
+    dp.run_polling(bot)
