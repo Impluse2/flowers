@@ -83,7 +83,7 @@ async def start_command(message: types.Message):
         [InlineKeyboardButton(text="Сортировать по цене", callback_data='sort_products_price')],
         [InlineKeyboardButton(text="Показать корзину", callback_data='show_cart')],
         [InlineKeyboardButton(text="Получить помощь", callback_data='help')],
-        [InlineKeyboardButton(text="Обновить список товаров", callback_data='update_products')],
+        # [InlineKeyboardButton(text="Обновить список товаров", callback_data='update_products')],
         [InlineKeyboardButton(text="Перейти на главную страницу", url=config.TARGET_URL)]
     ])
     # Отправляем приветственное сообщение
@@ -101,7 +101,7 @@ async def return_to_main_menu(callback_query: types.Message):
         [InlineKeyboardButton(text="Сортировать по цене", callback_data='sort_products_price')],
         [InlineKeyboardButton(text="Показать корзину", callback_data='show_cart')],
         [InlineKeyboardButton(text="Получить помощь", callback_data='help')],
-        [InlineKeyboardButton(text="Обновить список товаров", callback_data='update_products')],
+        # [InlineKeyboardButton(text="Обновить список товаров", callback_data='update_products')],
         [InlineKeyboardButton(text="Перейти на главную страницу", url=config.TARGET_URL)]
     ])
 
@@ -486,12 +486,12 @@ async def sort_products_price(update: CallbackQuery, by_price: bool):
         await show_products(update, sorted_products_df)  # Передаем отсортированные данные
     else:
         await update.message.answer(text="Нет товаров для сортировки.")
-
+@dp.message(Command(commands='update'))
 async def update_products(update: CallbackQuery):
     """Обновляет список товаров, вызывая парсер и перезагружая данные."""
     try:
         # Сообщаем пользователю, что обновление началось
-        await update.message.answer(text="Обновление списка товаров началось. Пожалуйста, подождите...")
+        await update.answer(text="Обновление списка товаров началось. Пожалуйста, подождите...")
 
         # Предположим, что парсер - это внешний скрипт, который нужно запустить
         # Можно использовать subprocess для вызова вашего парсера, если это отдельный файл
@@ -508,16 +508,16 @@ async def update_products(update: CallbackQuery):
             products_df = load_products()
 
             # Отправляем сообщение об успешном обновлении
-            await update.message.answer(text="Данные успешно обновлены!")
+            await update.answer(text="Данные успешно обновлены!")
         else:
             # Если произошла ошибка в парсере
             logging.error(f"Ошибка при запуске парсера: {result.stderr}")
-            await update.message.answer(text="Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
+            await update.answer(text="Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
 
     except Exception as e:
         # Если ошибка в процессе
         logging.error(f"Ошибка при обновлении списка товаров: {e}")
-        await update.message.answer(text="Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
+        await update.answer(text="Произошла ошибка при обновлении данных. Пожалуйста, попробуйте снова позже.")
 
 # Функция для отображения помощи
 async def show_help(update: CallbackQuery):
@@ -529,7 +529,7 @@ async def show_help(update: CallbackQuery):
         "- Нажмите на кнопку 'Сортировать по цене', чтобы увидеть отсортированные товары.\n"
         "- Нажмите на кнопку 'Показать корзину', чтобы посмотреть товары добавленные в корзину.\n"
         "- Нажмите на кнопку 'Получить помощь', чтобы получить помощь.\n"
-        "- Нажмите на кнопку 'Обновить список товаров', чтобы обновить данные.\n"
+        # "- Нажмите на кнопку 'Обновить список товаров', чтобы обновить данные.\n"
         "- Нажмите на кнопку 'Перейти на главную страницу', чтобы перейти на сайт."
     )
     await update.message.answer(help_message)
